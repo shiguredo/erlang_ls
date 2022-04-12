@@ -23,21 +23,43 @@ did_change(Params) ->
   ContentChanges = maps:get(<<"contentChanges">>, Params),
   TextDocument   = maps:get(<<"textDocument">>  , Params),
   Uri            = maps:get(<<"uri">>           , TextDocument),
+  Version        = maps:get(<<"version">>       , TextDocument),
   case ContentChanges of
     [] ->
       ok;
     [Change] when not is_map_key(<<"range">>, Change) ->
       #{<<"text">> := Text} = Change,
       {ok, Document} = els_utils:lookup_document(Uri),
-      ok = els_dt_document:insert(Document#{text => Text}),
-      background_index(Document#{text => Text});
-    ContentChanges ->
+      NewDocument = Document#{text => Text, version => Version},
+      case els_dt_document:versioned_insert(NewDocument) of
+        ok ->
+          background_index(NewDocument);
+        {error, condition_not_satisfied} ->
+          ok
+      end;
+    _ ->
       ?LOG_DEBUG("didChange INCREMENTAL [changes: ~p]", [ContentChanges]),
       Edits = [to_edit(Change) || Change <- ContentChanges],
       {ok, #{text := Text0} = Document} = els_utils:lookup_document(Uri),
-      Text = els_text:apply_edits(Text0, Edits),
-      ok = els_dt_document:insert(Document#{text => Text}),
-      background_index(Document#{text => Text})
+      try
+        Text = els_text:apply_edits(Text0, Edits),
+        NewDocument = Document#{text => Text, version => Version},
+        case els_dt_document:versioned_insert(NewDocument) of
+          ok ->
+            background_index(NewDocument);
+          {error, condition_not_satisfied} ->
+            ?LOG_DEBUG("Incremental changes to outdated version discarded: "
+                       "[version=~p] [changes=~p]",
+                       [Version, ContentChanges]),
+            ok
+        end
+      catch C:E:St ->
+          ?LOG_DEBUG("Error while applying edits. "
+                     "Most likely due to an outdated version of the document",
+                     "~p:~p:~p",
+                     [C, E, St]),
+          ok
+      end
   end.
 
 -spec did_open(map()) -> ok.

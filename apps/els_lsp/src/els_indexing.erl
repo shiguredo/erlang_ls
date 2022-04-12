@@ -70,13 +70,18 @@ ensure_deeply_indexed(Uri) ->
 deep_index(Document) ->
   #{id := Id, uri := Uri, text := Text, source := Source} = Document,
   {ok, POIs} = els_parser:parse(Text),
-  ok = els_dt_document:insert(Document#{pois => POIs}),
-  index_signatures(Id, Uri, Text, POIs),
-  case Source of
-    otp ->
-      ok;
-    S when S =:= app orelse S =:= dep ->
-      index_references(Id, Uri, POIs)
+  case els_dt_document:versioned_insert(Document#{pois => POIs}) of
+    ok ->
+      index_signatures(Id, Uri, Text, POIs),
+      case Source of
+        otp ->
+          ok;
+        S when S =:= app orelse S =:= dep ->
+          index_references(Id, Uri, POIs)
+      end;
+    {error, condition_not_satisfied} ->
+      ?LOG_DEBUG("Skip indexing old version [uri=~p]", [Uri]),
+      ok
   end.
 
 -spec index_signatures(atom(), uri(), binary(), [poi()]) -> ok.
@@ -129,10 +134,15 @@ shallow_index(Path, Source) ->
 -spec shallow_index(uri(), binary(), els_dt_document:source()) -> ok.
 shallow_index(Uri, Text, Source) ->
   Document = els_dt_document:new(Uri, Text, Source),
-  ok = els_dt_document:insert(Document),
-  #{id := Id, kind := Kind} = Document,
-  ModuleItem = els_dt_document_index:new(Id, Uri, Kind),
-  ok = els_dt_document_index:insert(ModuleItem).
+  case els_dt_document:versioned_insert(Document) of
+    ok ->
+      #{id := Id, kind := Kind} = Document,
+      ModuleItem = els_dt_document_index:new(Id, Uri, Kind),
+      ok = els_dt_document_index:insert(ModuleItem);
+    {error, condition_not_satisfied} ->
+      ?LOG_DEBUG("Skip indexing old version [uri=~p]", [Uri]),
+      ok
+  end.
 
 -spec maybe_start() -> true | false.
 maybe_start() ->

@@ -2,7 +2,6 @@
 %%% @doc The db gen_server.
 %%% @end
 %%%=============================================================================
-
 -module(els_db_server).
 
 %%==============================================================================
@@ -14,7 +13,13 @@
         , delete_object/2
         , match_delete/2
         , write/2
+        , conditional_write/4
         ]).
+
+%%==============================================================================
+%% Includes
+%%==============================================================================
+-include_lib("kernel/include/logger.hrl").
 
 %%==============================================================================
 %% Callbacks for the gen_server behaviour
@@ -59,6 +64,11 @@ match_delete(Table, Pattern) ->
 write(Table, Object) ->
   gen_server:call(?SERVER, {write, Table, Object}).
 
+-spec conditional_write(atom(), any(), tuple(), els_db:condition()) ->
+        ok | {error, any()}.
+conditional_write(Table, Key, Object, Condition) ->
+  gen_server:call(?SERVER, {conditional_write, Table, Key, Object, Condition}).
+
 %%==============================================================================
 %% Callbacks for the gen_server behaviour
 %%==============================================================================
@@ -83,7 +93,24 @@ handle_call({match_delete, Table, Pattern}, _From, State) ->
   {reply, ok, State};
 handle_call({write, Table, Object}, _From, State) ->
   true = ets:insert(Table, Object),
-  {reply, ok, State}.
+  {reply, ok, State};
+handle_call({conditional_write, Table, Key, Object, Condition}, _From, State) ->
+  case ets:lookup(Table, Key) of
+    [Entry] ->
+      case Condition(Entry) of
+        true ->
+          true = ets:insert(Table, Object),
+          {reply, ok, State};
+        false ->
+          ?LOG_DEBUG("Skip insertion due to invalid condition "
+                     "[table=~p] [key=~p]",
+                     [Table, Key]),
+          {reply, {error, condition_not_satisfied}, State}
+      end;
+    [] ->
+      true = ets:insert(Table, Object),
+      {reply, ok, State}
+  end.
 
 -spec handle_cast(any(), state()) -> {noreply, state()}.
 handle_cast(_Request, State) ->
