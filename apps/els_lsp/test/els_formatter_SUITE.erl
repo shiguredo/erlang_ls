@@ -90,7 +90,7 @@ format_unicode_doc(Config) ->
     Uri = ?config(format_unicode_input_uri, Config),
     #{result := Result} = els_client:document_formatting(Uri, 8, true),
     ?assertEqual(
-       [#{newText => <<"        %% １２３\n        X.\n"/utf8>>,
+       [#{newText => <<"        %% 👍😀🎉\n        X.\n"/utf8>>,
           range =>
             #{'end' => #{character => 0, line => 8},
               start => #{character => 0, line => 6}}}

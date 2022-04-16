@@ -4,5 +4,5 @@
 
 -spec main(any()) -> any().
 main(X) ->
-%% １２３
+%% 👍😀🎉
     X.
