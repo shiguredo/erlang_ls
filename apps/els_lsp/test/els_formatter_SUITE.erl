@@ -12,7 +12,8 @@
         ]).
 
 %% Test cases
--export([ format_doc/1
+-export([ format_doc/1,
+          format_unicode_doc/1
         ]).
 
 %%==============================================================================
@@ -72,6 +73,26 @@ format_doc(Config) ->
         #{newText => <<"        X.\n">>,
           range =>
             #{'end' => #{character => 0, line => 9},
+              start => #{character => 0, line => 6}}}
+       ]
+      , Result)
+  after
+    file:set_cwd(Cwd)
+  end,
+  ok.
+
+-spec format_unicode_doc(config()) -> ok.
+format_unicode_doc(Config) ->
+  {ok, Cwd} = file:get_cwd(),
+  RootPath = els_test_utils:root_path(),
+  try
+    file:set_cwd(RootPath),
+    Uri = ?config(format_unicode_input_uri, Config),
+    #{result := Result} = els_client:document_formatting(Uri, 8, true),
+    ?assertEqual(
+       [#{newText => <<"        %% 👍😀🎉\n        X.\n"/utf8>>,
+          range =>
+            #{'end' => #{character => 0, line => 8},
               start => #{character => 0, line => 6}}}
        ]
       , Result)
