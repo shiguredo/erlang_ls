@@ -136,16 +136,9 @@ format_document_bsp(Dir, RelativePath, _Options) ->
 
 -spec format_document_local(string(), string(), formatting_options()) ->
            boolean().
-format_document_local(Dir, RelativePath,
-                      #{ <<"insertSpaces">> := InsertSpaces
-                       , <<"tabSize">> := TabSize } = Options) ->
-  SubIndent = maps:get(<<"subIndent">>, Options, ?DEFAULT_SUB_INDENT),
-  Opts = #{ remove_tabs => InsertSpaces
-          , break_indent => TabSize
-          , sub_indent => SubIndent
-          , output_dir => Dir
-          },
-  Formatter = rebar3_formatter:new(default_formatter, Opts, unused),
+format_document_local(Dir, RelativePath, _Options) ->
+  Opts = #{ output_dir => Dir },
+  Formatter = rebar3_formatter:new(efmt_formatter, Opts, unused),
   rebar3_formatter:format_file(RelativePath, Formatter),
   true.
 
