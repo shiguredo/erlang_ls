@@ -22,8 +22,9 @@
         , base64_decode_term/1
         , levenshtein_distance/2
         , jaro_distance/2
+        , is_windows/0
+        , system_tmp_dir/0
         ]).
-
 
 %%==============================================================================
 %% Includes
@@ -114,17 +115,17 @@ find_header(Id) ->
   end.
 
 %% @doc Look for a module in the DB
--spec find_module(atom()) -> {ok, uri()} | {error, any()}.
+-spec find_module(atom()) -> {ok, uri()} | {error, not_found}.
 find_module(Id) ->
   case find_modules(Id) of
       {ok, [Uri | _]} ->
           {ok, Uri};
-      Else ->
-          Else
+      {ok, []} ->
+          {error, not_found}
   end.
 
 %% @doc Look for all versions of a module in the DB
--spec find_modules(atom()) -> {ok, [uri()]} | {error, any()}.
+-spec find_modules(atom()) -> {ok, [uri()]}.
 find_modules(Id) ->
   {ok, Candidates} = els_dt_document_index:lookup(Id),
   case [Uri || #{kind := module, uri := Uri} <- Candidates] of
@@ -132,7 +133,9 @@ find_modules(Id) ->
       FileName = atom_to_list(Id) ++ ".erl",
       case els_indexing:find_and_deeply_index_file(FileName) of
         {ok, Uri} -> {ok, [Uri]};
-        Error -> Error
+        _Error ->
+          ?LOG_INFO("Finding module failed [filename=~p]", [FileName]),
+          {ok, []}
       end;
     Uris ->
       {ok, prioritize_uris(Uris)}
@@ -248,6 +251,20 @@ to_list(X) when is_binary(X) ->
   case unicode:characters_to_list(X) of
     Result when is_list(Result) -> Result;
     _ -> binary_to_list(X)
+  end.
+
+-spec is_windows() -> boolean().
+is_windows() ->
+  {OS, _} = os:type(),
+  OS =:= win32.
+
+-spec system_tmp_dir() -> string().
+system_tmp_dir() ->
+  case is_windows() of
+    true ->
+      os:getenv("TEMP");
+    false ->
+      "/tmp"
   end.
 
 %%==============================================================================
