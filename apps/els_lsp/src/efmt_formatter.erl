@@ -15,7 +15,7 @@ init(_Opts, _) ->
     #?MODULE{}.
 
 -spec format_file(file:filename_all(), state(), rebar3_formatter:opts()) ->
-          rebar3_formatter:result().
+    rebar3_formatter:result().
 format_file(File, _State, Opts) ->
     case Opts of
         #{action := verify} ->
@@ -35,7 +35,7 @@ format_file(File, _State, Opts) ->
     end.
 
 -spec execute_command([string()]) -> {ok | error, binary()}.
-execute_command(Args)  ->
+execute_command(Args) ->
     case command_path() of
         {error, Reason} ->
             {error, Reason};
@@ -62,7 +62,6 @@ collect_command_output(Port, Output) ->
             {ok, list_to_binary(Output)};
         {Port, {exit_status, _}} ->
             {error, list_to_binary(Output)}
-    after
-        60000 ->
-            {erorr, <<"timeout">>}
+    after 60000 ->
+        {erorr, <<"timeout">>}
     end.
