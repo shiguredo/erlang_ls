@@ -40,8 +40,13 @@ execute_command(Args) ->
         {error, Reason} ->
             {error, Reason};
         {ok, Path} ->
-            Port = erlang:open_port({spawn_executable, Path}, [{args, Args}, exit_status]),
-            collect_command_output(Port, [])
+            case project_root_dir() of
+                {error, Reason} ->
+                    {error, Reason};
+                {ok, ProjectRootDir} ->
+                    Port = erlang:open_port({spawn_executable, Path}, [{args, Args}, {cd, ProjectRootDir}, exit_status]),
+                    collect_command_output(Port, [])
+            end
     end.
 
 -spec command_path() -> {ok, string()} | {error, binary()}.
@@ -64,4 +69,24 @@ collect_command_output(Port, Output) ->
             {error, list_to_binary(Output)}
     after 60000 ->
         {erorr, <<"timeout">>}
+    end.
+
+-spec project_root_dir() -> {ok, string()} | {error, binary()}.
+project_root_dir() ->
+    case file:get_cwd() of
+        {error, Reason} ->
+            {error, iolist_to_binary(io_lib:format("`file:get_cwd/0` failed: reason=~p", [Reason]))};
+        {ok, Dir} ->
+            project_root_dir(Dir)
+    end.
+
+-spec project_root_dir(string()) -> {ok, string()} | {error, binary()}.
+project_root_dir("/") ->
+    {error, <<"rebar.config is not found">>};
+project_root_dir(Dir) ->
+    case filelib:is_file(filename:join(Dir, "rebar.config")) of
+        true ->
+            {ok, Dir};
+        false ->
+            project_root_dir(filename:dirname(Dir))
     end.
