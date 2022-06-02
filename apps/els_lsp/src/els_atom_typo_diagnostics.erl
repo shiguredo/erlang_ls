@@ -1,7 +1,8 @@
 %%==============================================================================
-%% Unused Includes diagnostics
+%% AtomTypo diagnostics
+%% Catch common atom typos
 %%==============================================================================
--module(els_unused_record_fields_diagnostics).
+-module(els_atom_typo_diagnostics).
 
 %%==============================================================================
 %% Behaviours
@@ -28,42 +29,44 @@
 
 -spec is_default() -> boolean().
 is_default() ->
-    true.
+    false.
 
 -spec run(uri()) -> [els_diagnostics:diagnostic()].
 run(Uri) ->
-    case filename:extension(Uri) of
-        <<".erl">> ->
-            case els_utils:lookup_document(Uri) of
-                {error, _Error} ->
-                    [];
-                {ok, Document} ->
-                    UnusedRecordFields = find_unused_record_fields(Document),
-                    [make_diagnostic(POI) || POI <- UnusedRecordFields]
-            end;
-        _ ->
-            []
+    case els_utils:lookup_document(Uri) of
+        {error, _Error} ->
+            [];
+        {ok, Document} ->
+            Atoms = [<<"false">>, <<"true">>, <<"undefined">>, <<"error">>],
+            POIs = els_dt_document:pois(Document, [atom]),
+            [
+                make_diagnostic(POI, Atom)
+             || #{id := Id} = POI <- POIs,
+                Atom <- Atoms,
+                atom_to_binary(Id, utf8) =/= Atom,
+                els_utils:jaro_distance(atom_to_binary(Id, utf8), Atom) > 0.9
+            ]
     end.
 
 -spec source() -> binary().
 source() ->
-    <<"UnusedRecordFields">>.
+    <<"AtomTypo">>.
 
 %%==============================================================================
 %% Internal Functions
 %%==============================================================================
--spec find_unused_record_fields(els_dt_document:item()) -> [els_poi:poi()].
-find_unused_record_fields(Document) ->
-    Definitions = els_dt_document:pois(Document, [record_def_field]),
-    Usages = els_dt_document:pois(Document, [record_field]),
-    UsagesIds = lists:usort([Id || #{id := Id} <- Usages]),
-    [POI || #{id := Id} = POI <- Definitions, not lists:member(Id, UsagesIds)].
-
--spec make_diagnostic(els_poi:poi()) -> els_diagnostics:diagnostic().
-make_diagnostic(#{id := {RecName, RecField}, range := POIRange}) ->
-    Range = els_protocol:range(POIRange),
-    FullName = els_utils:to_binary(io_lib:format("#~p.~p", [RecName, RecField])),
-    Message = <<"Unused record field: ", FullName/binary>>,
+-spec make_diagnostic(els_poi:poi(), binary()) -> els_diagnostics:diagnostic().
+make_diagnostic(#{range := Range}, Atom) ->
+    Message = els_utils:to_binary(
+        io_lib:format(
+            "Atom typo? Did you mean: ~s",
+            [Atom]
+        )
+    ),
     Severity = ?DIAGNOSTIC_WARNING,
-    Source = source(),
-    els_diagnostics:make_diagnostic(Range, Message, Severity, Source).
+    els_diagnostics:make_diagnostic(
+        els_protocol:range(Range),
+        Message,
+        Severity,
+        source()
+    ).
