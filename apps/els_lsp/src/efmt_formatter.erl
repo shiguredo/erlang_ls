@@ -25,7 +25,7 @@ format_file(File, _State, Opts) ->
 
             ok = filelib:ensure_dir(Path),
             {ok, _} = file:copy(File, Path),
-            case execute_command(["efmt", "--write", Path]) of
+            case execute_command(["--write", Path]) of
                 {ok, _} ->
                     changed;
                 {error, Output} ->
@@ -34,28 +34,43 @@ format_file(File, _State, Opts) ->
             end
     end.
 
--spec execute_command([string()]) -> {ok | error, binary()}.
-execute_command(Args) ->
-    case command_path() of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, Path} ->
+-spec find_command() -> {ok, string(), [string()], [term()]} | {error, binary()}.
+find_command() ->
+    case os:find_executable("efmt") of
+        false ->
             case project_root_dir() of
                 {error, Reason} ->
                     {error, Reason};
-                {ok, ProjectRootDir} ->
-                    Port = erlang:open_port({spawn_executable, Path}, [{args, Args}, {cd, ProjectRootDir}, exit_status]),
-                    collect_command_output(Port, [])
-            end
+                {ok, RootDir} ->
+                    case os:find_executable(filename:join(RootDir, "_build/default/plugins/rebar3_efmt/priv/efmt")) of
+                        false ->
+                            case os:find_executable("rebar3") of
+                                false ->
+                                    case os:find_executable(filename:join(RootDir, "rebar3")) of
+                                        false ->
+                                            {error, <<"both rebar3 and efmt commands are not found">>};
+                                        Path ->
+                                            {ok, Path, ["efmt"], [{cd, RootDir}]}
+                                    end;
+                                Path ->
+                                    {ok, Path, ["efmt"], [{cd, RootDir}]}
+                            end;
+                        Path ->
+                            {ok, Path, [], []}
+                    end
+            end;
+        Path ->
+            {ok, Path, [], []}
     end.
 
--spec command_path() -> {ok, string()} | {error, binary()}.
-command_path() ->
-    case os:find_executable("rebar3") of
-        false ->
-            {error, <<"rebar3 is not found">>};
-        Path ->
-            {ok, Path}
+-spec execute_command([string()]) -> {ok | error, binary()}.
+execute_command(Args) ->
+    case find_command() of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, Path, Args0, Options0} ->
+            Port = erlang:open_port({spawn_executable, Path}, [{args, Args0 ++ Args}, exit_status | Options0]),
+            collect_command_output(Port, [])
     end.
 
 -spec collect_command_output(port(), iolist()) -> {ok | error, binary()}.
